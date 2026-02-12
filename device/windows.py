@@ -369,6 +369,14 @@ class Windows(Device):
                 "Format":"chr",
                 "Data":None
             },
+            f"./Vendor/MSFT/WiFi/Profile": {
+                "Format": "node",
+                "Data": None
+            },
+            f"./User/{self.uid}/Vendor/MSFT/WiFi/Profile": {
+                "Format": "node",
+                "Data": None
+            }
         }
         if key in data:
             return data[key]
