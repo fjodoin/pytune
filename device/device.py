@@ -285,6 +285,10 @@ class Device:
             
             # Extract SCEP nodes
             for cmd in cmds:
+                # Check if cmd is a dict before calling .get()
+                if not isinstance(cmd, dict):
+                    continue
+                    
                 if cmd.get('CmdID'):
                     items = cmd.get('Item', [])
                     if not isinstance(items, list):
