@@ -91,11 +91,11 @@ class Device:
         return
 
     def process_scep_profiles(self, cert_csp_nodes):
-    """
-    Process SCEP profiles - to be overridden by subclasses that support SCEP
-    Base implementation does nothing (Android/Linux don't support SCEP yet)
-    """
-    return []
+        """
+        Process SCEP profiles - to be overridden by subclasses that support SCEP
+        Base implementation does nothing (Android/Linux don't support SCEP yet)
+        """
+        return []
     
     def enroll_intune(self, certpfx, refresh_token, is_device, is_hybrid):
         if certpfx:
