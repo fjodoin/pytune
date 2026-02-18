@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from device.device import Device
 from utils.utils import prtauth, extract_pfx, save_encrypted_message_as_smime, decrypt_smime_file, aes_decrypt, renew_token
 from utils.scep import SCEPClient
+from utils.scep_simulator import SCEPWorkflowSimulator
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import Encoding
@@ -26,6 +27,7 @@ class Windows(Device):
         self.checkin_url = 'https://r.manage.microsoft.com/devicegatewayproxy/cimhandler.ashx'        
         self.provider_name = 'WindowsEnrollment'
         self.cname = 'ConfigMgrEnroll'
+        self.scep_simulator = SCEPWorkflowSimulator(logger, device_name, deviceid)
     
     def process_scep_profiles(self, cert_csp_nodes):
         """

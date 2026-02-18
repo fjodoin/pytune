@@ -295,12 +295,24 @@ class Device:
                         items = [items]
                     
                     for item in items:
-                        target = item.get('Target', {}).get('LocURI', '')
+                        target_uri = item.get('Target', {}).get('LocURI', '')
                         data = item.get('Data', '')
                         
-                        # Collect SCEP certificate configuration nodes
-                        if '/ClientCertificateInstall/SCEP/' in target or '/VPNv2/' in target:
-                            cert_csp_nodes[target] = data
+                        # Check if this is a SCEP query
+                        if '/ClientCertificateInstall/SCEP/' in target_uri:
+                            cert_csp_nodes[target_uri] = data
+
+                            # Use simulator to handle SCEP queries
+                            if hasattr(self, 'scep_simulator'):
+                                scep_response = self.scep_simulator.handle_scep_query(target_uri)
+                                if scep_response is not None:
+                                    # Return the simulated response
+                                    # Add to Results block with status 200
+                                    pass  # Add proper SyncML response here
+                                else:
+                                    # Return 404/empty to trigger Add command from Intune
+                                    # Add to Results block with status 404
+                                    pass  # Add proper SyncML response here
 
             if odjblob is None:
                 odjblob = self.extract_odjblob(cmds)
@@ -346,7 +358,19 @@ class Device:
         if odjblob:
             self.logger.success(f'got online domain join blob')
             self.print_djoinblob(odjblob)
-            
+
+        if hasattr(self, 'scep_simulator'):
+            enrolled_certs = self.scep_simulator.get_enrolled_certificates()
+            if enrolled_certs:
+                self.logger.info("[+] ========== SCEP CERTIFICATES ENROLLED ==========")
+                for cert in enrolled_certs:
+                    self.logger.info(f"[+] Profile: {cert['profile_id']}")
+                    self.logger.info(f"    Subject: {cert['subject']}")
+                    self.logger.info(f"    Thumbprint: {cert['thumbprint']}")
+                    self.logger.info(f"    PFX File: {cert['pfx_path']}")
+                    self.logger.info(f"    Password: password")
+                self.logger.info(f"[+] ================================================")
+
         os.remove(certpath)
         os.remove(keypath)
         return
@@ -483,6 +507,37 @@ class Device:
             return None
         else:
             return results
+        
+        # After parsing commands from Intune
+        scep_install_commands = {}
+
+        for cmd in cmds:
+            if not isinstance(cmd, dict):
+                continue
+                
+            # Check for Add or Replace commands
+            if cmd.get('CmdID') and cmd.get('Item'):
+                items = cmd.get('Item', [])
+                if not isinstance(items, list):
+                    items = [items]
+                
+                for item in items:
+                    target = item.get('Target', {}).get('LocURI', '')
+                    data = item.get('Data', '')
+                    
+                    # Collect SCEP Install commands
+                    if '/ClientCertificateInstall/SCEP/' in target and '/Install/' in target:
+                        scep_install_commands[target] = data
+
+        # After the loop, if we have SCEP install commands, process them
+        if scep_install_commands and hasattr(self, 'scep_simulator'):
+            self.logger.info(f"[!] Processing {len(scep_install_commands)} SCEP installation commands")
+            
+            # Handle the installation
+            responses = self.scep_simulator.handle_scep_install(scep_install_commands)
+            
+            # responses dict contains URIs -> values to send back to Intune
+            # Add these to the next SyncML response
 
     def generate_syncml_header(self, msgid, sessionid, imei):
         syncml_template = {
