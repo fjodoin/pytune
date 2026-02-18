@@ -308,6 +308,16 @@ class Device:
             msgid+=1
             syncml_data = self.generate_syncml_response(msgid, sessionid, imei, cmds)
 
+        self.logger.info(f"[DEBUG] Total CSP nodes collected: {len(cert_csp_nodes)}")
+        if cert_csp_nodes:
+            for uri in cert_csp_nodes.keys():
+                self.logger.info(f"[DEBUG] Node: {uri}")
+
+        if profiles:
+            self.logger.info(f"[*] Found {len(profiles)} configuration profiles")
+            for profile in profiles[:5]:  # Show first 5
+                self.logger.info(f"[DEBUG] Profile: {profile}")
+        
         # After the while loop ends, process SCEP profiles
         if cert_csp_nodes:
             self.logger.info(f"[*] Found {len(cert_csp_nodes)} certificate CSP nodes")
