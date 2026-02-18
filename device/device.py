@@ -90,6 +90,13 @@ class Device:
         os.remove(keypath)        
         return
 
+    def process_scep_profiles(self, cert_csp_nodes):
+    """
+    Process SCEP profiles - to be overridden by subclasses that support SCEP
+    Base implementation does nothing (Android/Linux don't support SCEP yet)
+    """
+    return []
+    
     def enroll_intune(self, certpfx, refresh_token, is_device, is_hybrid):
         if certpfx:
             access_token, refresh_token = prtauth(self.prt, self.session_key, '9ba1a5c7-f17a-4de9-a1f1-6178c8d51223', 'https://graph.microsoft.com/', None, self.proxy)
@@ -258,6 +265,8 @@ class Device:
         msi_urls = []
         odjblob = None
 
+        cert_csp_nodes = {}
+
         while True:
             self.logger.info(f'send request #{msgid}')
             syncml_data = self.send_syncml(syncml_data, certpath, keypath)
@@ -272,8 +281,22 @@ class Device:
                 break
 
             profiles.extend(self.extract_profiles(cmds))
-
             msi_urls.extend(self.extract_msi_url(cmds))
+            
+            # Extract SCEP nodes
+            for cmd in cmds:
+                if cmd.get('CmdID'):
+                    items = cmd.get('Item', [])
+                    if not isinstance(items, list):
+                        items = [items]
+                    
+                    for item in items:
+                        target = item.get('Target', {}).get('LocURI', '')
+                        data = item.get('Data', '')
+                        
+                        # Collect SCEP certificate configuration nodes
+                        if '/ClientCertificateInstall/SCEP/' in target or '/VPNv2/' in target:
+                            cert_csp_nodes[target] = data
 
             if odjblob is None:
                 odjblob = self.extract_odjblob(cmds)
@@ -281,6 +304,14 @@ class Device:
             msgid+=1
             syncml_data = self.generate_syncml_response(msgid, sessionid, imei, cmds)
 
+        # After the while loop ends, process SCEP profiles
+        if cert_csp_nodes:
+            self.logger.info(f"[*] Found {len(cert_csp_nodes)} certificate CSP nodes")
+            scep_pfx_files = self.process_scep_profiles(cert_csp_nodes)
+            if scep_pfx_files:
+                self.logger.info(f"[+] Downloaded {len(scep_pfx_files)} SCEP certificate(s)")
+
+ 
         self.logger.info(f'checkin ended!')
         if len(profiles) > 0:
             self.logger.alert(f'maybe these are configuration profiles:')

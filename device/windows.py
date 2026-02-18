@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from device.device import Device
 from utils.utils import prtauth, extract_pfx, save_encrypted_message_as_smime, decrypt_smime_file, aes_decrypt, renew_token
+from utils.scep import SCEPClient
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import Encoding
@@ -25,6 +26,42 @@ class Windows(Device):
         self.checkin_url = 'https://r.manage.microsoft.com/devicegatewayproxy/cimhandler.ashx'        
         self.provider_name = 'WindowsEnrollment'
         self.cname = 'ConfigMgrEnroll'
+    
+    def process_scep_profiles(self, cert_csp_nodes):
+        """
+        Process SCEP certificate profiles from Intune check-in
+        
+        Args:
+            cert_csp_nodes (dict): Certificate CSP configuration nodes
+        
+        Returns:
+            list: Paths to downloaded SCEP certificate PFX files
+        """
+        scep_client = SCEPClient(self.logger, self.proxy)
+        pfx_files = []
+        
+        # Parse SCEP configuration from CSP nodes
+        scep_config = scep_client.parse_scep_profile_from_cert_csp(cert_csp_nodes)
+        
+        if scep_config.get('scep_url'):
+            self.logger.info("[!] SCEP certificate profile detected!")
+            self.logger.info(f"[*] SCEP URL: {scep_config['scep_url']}")
+            
+            # Request certificate
+            pfx_path = scep_client.request_scep_certificate(
+                scep_config=scep_config,
+                device_name=self.device_name,
+                device_id=self.deviceid,
+                user_upn=None  # Set to user UPN for user certificates
+            )
+            
+            if pfx_path:
+                self.logger.info(f"[+] Successfully obtained SCEP certificate: {pfx_path}")
+                pfx_files.append(pfx_path)
+            else:
+                self.logger.error("[-] Failed to obtain SCEP certificate")
+        
+        return pfx_files
     
     def get_enrollment_token(self, refresh_token):
         if self.prt:

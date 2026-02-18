@@ -1,0 +1,7 @@
+colr
+xmltodict
+rich
+roadlib
+cryptography>=41.0.0
+asn1crypto>=1.5.0
+requests>=2.31.0
