@@ -170,8 +170,14 @@ def create_pfx(certpath, keypath, pfxpath):
     return
 
 def extract_pfx(pfxpath, certpath, keypath):
-    subprocess.run(f'openssl pkcs12 -in {pfxpath} -nodes -password pass:password -out {certpath} -clcerts', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)    
-    subprocess.run(f'openssl pkcs12 -in {pfxpath} -nodes -password pass:password -out {keypath} -nocerts -nodes', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    from cryptography.hazmat.primitives.serialization import pkcs12 as crypto_pkcs12
+    with open(pfxpath, 'rb') as f:
+        pfx_data = f.read()
+    private_key, certificate, _ = crypto_pkcs12.load_key_and_certificates(pfx_data, b'password')
+    with open(keypath, 'wb') as f:
+        f.write(private_key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+    with open(certpath, 'wb') as f:
+        f.write(certificate.public_bytes(serialization.Encoding.PEM))
     return
 
 def get_str_and_next(blob, start):
@@ -200,10 +206,46 @@ def save_encrypted_message_as_smime(encrypted_message, filename):
         f.write(smime_message)
 
 def decrypt_smime_file(filename, keypath):
-    result = subprocess.run(f'openssl cms -decrypt -in {filename} -inkey {keypath}', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode != 0:
-        raise RuntimeError(f'openssl decryption failed: {result.stderr.decode("utf-8").strip()}')
-    return result.stdout.decode('utf-8')
+    from asn1crypto import cms as asn1_cms
+    from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
+    from cryptography.hazmat.primitives import padding as sym_padding
+
+    with open(keypath, 'rb') as f:
+        private_key = serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
+
+    with open(filename, 'r') as f:
+        content = f.read()
+
+    # S/MIME body is separated from headers by a blank line
+    _, body = content.split('\n\n', 1)
+    der_bytes = base64.b64decode(body)
+
+    # Parse CMS EnvelopedData
+    content_info = asn1_cms.ContentInfo.load(der_bytes)
+    enveloped_data = content_info['content'].parsed
+
+    # Unwrap the Content Encryption Key with our RSA private key
+    cek = None
+    for ri in enveloped_data['recipient_infos']:
+        encrypted_key_bytes = bytes(ri.chosen['encrypted_key'])
+        cek = private_key.decrypt(encrypted_key_bytes, asym_padding.PKCS1v15())
+        break
+
+    if cek is None:
+        raise RuntimeError('No RecipientInfo found in CMS EnvelopedData')
+
+    # AES-CBC decrypt the content
+    eci = enveloped_data['encrypted_content_info']
+    iv = eci['content_encryption_algorithm']['parameters'].native
+    enc_content = bytes(eci['encrypted_content'])
+
+    cipher = Cipher(algorithms.AES(cek), modes.CBC(iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+    padded = decryptor.update(enc_content) + decryptor.finalize()
+
+    unpadder = sym_padding.PKCS7(128).unpadder()
+    decrypted = unpadder.update(padded) + unpadder.finalize()
+    return decrypted.decode('utf-8')
 
 def aes_decrypt(key, iv, content):    
     cipher = Cipher(algorithms.AES(base64.b64decode(key)), modes.CBC(base64.b64decode(iv)), backend=default_backend())
