@@ -234,12 +234,21 @@ def decrypt_smime_file(filename, keypath):
     if cek is None:
         raise RuntimeError('No RecipientInfo found in CMS EnvelopedData')
 
-    # AES-CBC decrypt the content
+    # Decrypt the content using the algorithm specified in the CMS structure
     eci = enveloped_data['encrypted_content_info']
-    iv = eci['content_encryption_algorithm']['parameters'].native
+    enc_alg = eci['content_encryption_algorithm']
+    iv = enc_alg['parameters'].native
     enc_content = bytes(eci['encrypted_content'])
 
-    cipher = Cipher(algorithms.AES(cek), modes.CBC(iv), backend=default_backend())
+    enc_cipher = enc_alg.encryption_cipher
+    if enc_cipher == 'aes':
+        algo = algorithms.AES(cek)
+    elif enc_cipher == 'tripledes':
+        algo = algorithms.TripleDES(cek)
+    else:
+        raise RuntimeError(f'Unsupported content encryption cipher: {enc_cipher}')
+
+    cipher = Cipher(algo, modes.CBC(iv), backend=default_backend())
     decryptor = cipher.decryptor()
     padded = decryptor.update(enc_content) + decryptor.finalize()
 
