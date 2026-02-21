@@ -222,7 +222,7 @@ def decrypt_smime_file(filename, keypath):
 
     # Parse CMS EnvelopedData
     content_info = asn1_cms.ContentInfo.load(der_bytes)
-    enveloped_data = content_info['content'].parsed
+    enveloped_data = content_info['content']
 
     # Unwrap the Content Encryption Key with our RSA private key
     cek = None
