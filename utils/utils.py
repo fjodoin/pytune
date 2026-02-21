@@ -201,6 +201,8 @@ def save_encrypted_message_as_smime(encrypted_message, filename):
 
 def decrypt_smime_file(filename, keypath):
     result = subprocess.run(f'cat {filename} | openssl cms -decrypt -inkey {keypath}', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        raise RuntimeError(f'openssl decryption failed: {result.stderr.decode("utf-8").strip()}')
     return result.stdout.decode('utf-8')
 
 def aes_decrypt(key, iv, content):    
