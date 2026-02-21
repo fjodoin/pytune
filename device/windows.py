@@ -449,7 +449,7 @@ class Windows(Device):
             i = 1
             for policy in policies:
                 self.logger.info(f'#{i} (policyid:{policy["PolicyId"]}):\n')
-                print(policy["PolicyBody"] + '\n')
+                print((policy["PolicyBody"] or '') + '\n')
                 i=i+1
 
         self.logger.info(f'downloading win32apps...')
